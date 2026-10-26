@@ -819,5 +819,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Save as profile", "ذخیره به عنوان پروفایل"),
         ("Delete profile", "حذف پروفایل"),
         ("Please enter a profile name", "لطفاً نام پروفایل را وارد کنید"),
+        ("Server profile", "پروفایل سرور"),
+        ("Name reserved", ""),
 ].iter().cloned().collect();
 }

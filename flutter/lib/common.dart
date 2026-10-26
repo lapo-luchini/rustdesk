@@ -3693,6 +3693,13 @@ Future<bool> setServerConfig(
 
 const kOptionServerProfiles = 'server-profiles';
 const kOptionServerProfileActive = 'server-profile-active';
+// Peer option naming which server configuration (profile) a peer is
+// registered on; `kServerProfileGlobalName` names the default public
+// server cluster, and the empty value follows the active configuration.
+// Also `OPTION_PEER_SERVER_PROFILE`/`SERVER_PROFILE_GLOBAL` in the rust
+// side peer online query.
+const kOptionPeerServerProfile = 'server-profile';
+const kServerProfileGlobalName = 'global';
 
 Future<List<ServerProfile>> getServerProfiles() async {
   final value = await bind.mainGetOption(key: kOptionServerProfiles);

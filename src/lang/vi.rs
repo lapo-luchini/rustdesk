@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Save as profile", "Lưu thành hồ sơ"),
         ("Delete profile", "Xóa hồ sơ"),
         ("Please enter a profile name", "Vui lòng nhập tên hồ sơ"),
+        ("Server profile", "Hồ sơ máy chủ"),
+        ("Name reserved", "Tên được dành riêng"),
 ].iter().cloned().collect();
 }

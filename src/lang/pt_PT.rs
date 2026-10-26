@@ -821,5 +821,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Save as profile", "Guardar como perfil"),
         ("Delete profile", "Eliminar perfil"),
         ("Please enter a profile name", "Introduza um nome de perfil"),
+        ("Server profile", "Perfil do servidor"),
+        ("Name reserved", "Nome reservado"),
 ].iter().cloned().collect();
 }

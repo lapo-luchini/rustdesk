@@ -129,6 +129,10 @@ void showServerSettingsWithValue(
         showToast(translate('Please enter a profile name'));
         return;
       }
+      if (name == kServerProfileGlobalName) {
+        showToast(translate('Name reserved'));
+        return;
+      }
       profiles.removeWhere((p) => p.name == name);
       final config = currentServerConfig();
       profiles.add(ServerProfile(name,

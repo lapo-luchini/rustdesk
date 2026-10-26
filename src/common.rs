@@ -1219,6 +1219,32 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     "".to_owned()
 }
 
+/// The `server-profiles` option is a JSON array of `{name, id_server, ...}`
+/// objects shared with the flutter UI (`ServerProfile` class); only the
+/// fields needed here are read. Returns the ID server of the named profile,
+/// `None` when the name matches no profile.
+pub fn get_profile_rendezvous_server(profile: &str) -> Option<String> {
+    let value = crate::ui_interface::get_option("server-profiles");
+    if value.is_empty() {
+        return None;
+    }
+    let profiles = serde_json::from_str::<Vec<serde_json::Value>>(&value).ok()?;
+    let entry = profiles.iter().find(|e| {
+        e.get("name")
+            .and_then(|v| v.as_str())
+            .map(|v| v.trim() == profile)
+            .unwrap_or(false)
+    })?;
+    Some(
+        entry
+            .get("id_server")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_owned(),
+    )
+}
+
 #[inline]
 pub fn get_api_server(api: String, custom: String) -> String {
     if Config::no_register_device() {

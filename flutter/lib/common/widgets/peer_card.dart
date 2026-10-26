@@ -732,6 +732,38 @@ abstract class BasePeerCard extends StatelessWidget {
         (await bind.mainGetPeerOption(id: id, key: kOptionForceAlwaysRelay)));
   }
 
+  /// Which server configuration the peer is registered on: its online state
+  /// is queried on that server, so the online icon reports the truth. Only
+  /// shown when profiles exist. `null` hides the entry.
+  @protected
+  Future<MenuEntryBase<String>?> _serverProfileAction(String id) async {
+    final profiles = await getServerProfiles();
+    if (profiles.isEmpty) {
+      return null;
+    }
+    return MenuEntrySubRadios<String>(
+      text: translate('Server profile'),
+      curOptionGetter: () async =>
+          (await bind.mainGetPeerOption(id: id, key: kOptionPeerServerProfile))
+              .trim(),
+      optionSetter: (String old, String value) async {
+        await bind.mainSetPeerOption(
+            id: id, key: kOptionPeerServerProfile, value: value);
+        showToast(translate('Successful'));
+      },
+      optionsGetter: () => [
+        MenuEntryRadioOption(text: translate('Default'), value: ''),
+        MenuEntryRadioOption(
+            text: translate('Public server'), value: kServerProfileGlobalName),
+        ...profiles
+            .map((profile) =>
+                MenuEntryRadioOption(text: profile.name, value: profile.name)),
+      ],
+      padding: menuPadding,
+      dismissOnClicked: false,
+    );
+  }
+
   @protected
   Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
     return MenuEntrySwitch<String>(
@@ -986,6 +1018,10 @@ class RecentPeerCard extends BasePeerCard {
     if (!isWeb) {
       menuItems.add(await _forceAlwaysRelayAction(peer.id));
     }
+    final serverProfileEntry = isWeb ? null : await _serverProfileAction(peer.id);
+    if (serverProfileEntry != null) {
+      menuItems.add(serverProfileEntry);
+    }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));
     }
@@ -1048,6 +1084,10 @@ class FavoritePeerCard extends BasePeerCard {
     // menuItems.add(await _openNewConnInOptAction(peer.id));
     if (!isWeb) {
       menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    }
+    final serverProfileEntry = isWeb ? null : await _serverProfileAction(peer.id);
+    if (serverProfileEntry != null) {
+      menuItems.add(serverProfileEntry);
     }
     if (isWindows && peer.platform == kPeerPlatformWindows) {
       menuItems.add(_rdpAction(context, peer.id));

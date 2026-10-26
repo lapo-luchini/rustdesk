@@ -5279,13 +5279,66 @@ async fn hc_connection_(
 pub mod peer_online {
     use hbb_common::{
         anyhow::bail,
-        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT},
+        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT, RENDEZVOUS_PORT, RENDEZVOUS_SERVERS},
+        futures::future::join_all,
         log,
         rendezvous_proto::*,
         sleep,
         socket_client::connect_tcp,
         ResultType, Stream,
     };
+    use std::collections::HashMap;
+
+    // Peer option naming which server configuration the peer is registered on.
+    // Also `kOptionPeerServerProfile` in the flutter UI.
+    const OPTION_PEER_SERVER_PROFILE: &str = "server-profile";
+    // Peer-option value naming the default public rendezvous cluster. Also
+    // `kServerProfileGlobalName` in the flutter UI; the UI refuses to save a
+    // profile under this name.
+    const SERVER_PROFILE_GLOBAL: &str = "global";
+
+    /// The rendezvous server an online query for a configured peer goes to:
+    /// peers with no profile follow the active configuration, `global` peers
+    /// are registered on the public cluster, and named profiles are queried on
+    /// the ID server of that profile. Unknown or deleted profile names fall
+    /// back to the active configuration, like unassigned peers.
+    fn server_of_peer(profile: &str) -> Option<String> {
+        if profile.is_empty() {
+            return None;
+        }
+        if profile == SERVER_PROFILE_GLOBAL {
+            return Some(RENDEZVOUS_SERVERS[0].to_owned());
+        }
+        let server = crate::get_profile_rendezvous_server(profile)?;
+        if server.is_empty() {
+            None
+        } else {
+            Some(server)
+        }
+    }
+
+    fn group_by_server(ids: &Vec<String>) -> Vec<(Option<String>, Vec<String>)> {
+        let mut unassigned = Vec::new();
+        let mut by_server: HashMap<String, Vec<String>> = Default::default();
+        for id in ids {
+            let profile = crate::ui_interface::get_peer_option(
+                id.to_owned(),
+                OPTION_PEER_SERVER_PROFILE.to_owned(),
+            );
+            match server_of_peer(profile.trim()) {
+                Some(server) => by_server.entry(server).or_default().push(id.to_owned()),
+                None => unassigned.push(id.to_owned()),
+            }
+        }
+        let mut groups: Vec<(Option<String>, Vec<String>)> = Vec::new();
+        if !unassigned.is_empty() {
+            groups.push((None, unassigned));
+        }
+        for (server, group_ids) in by_server {
+            groups.push((Some(server), group_ids));
+        }
+        groups
+    }
 
     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
         let test = false;
@@ -5295,21 +5348,52 @@ pub mod peer_online {
             let offlines = onlines.drain((onlines.len() / 2)..).collect();
             f(onlines, offlines)
         } else {
-            let query_timeout = std::time::Duration::from_millis(3_000);
-            match query_online_states_(&ids, query_timeout).await {
-                Ok((onlines, offlines)) => {
-                    f(onlines, offlines);
-                }
+            // One query per distinct rendezvous server; peers without a
+            // profile share the single active-configuration query as before.
+            let groups = match hbb_common::tokio::task::spawn_blocking(|| group_by_server(&ids))
+                .await
+            {
+                Ok(groups) => groups,
                 Err(e) => {
-                    log::debug!("query onlines, {}", &e);
+                    log::debug!("query onlines, group by server failed: {}", e);
+                    return;
                 }
+            };
+            let query_timeout = std::time::Duration::from_millis(3_000);
+            let futs = groups.into_iter().map(|(server, group_ids)| {
+                hbb_common::tokio::spawn(async move {
+                    match query_online_states_for(server, &group_ids, query_timeout).await {
+                        Ok(res) => Ok(res),
+                        Err(e) => {
+                            // Skipped: nothing changes this round, like the
+                            // single-server error path of old code.
+                            log::debug!("query onlines, {}", &e);
+                            Err(e)
+                        }
+                    }
+                })
+            });
+            let mut mixed_onlines = Vec::new();
+            let mut mixed_offlines = Vec::new();
+            let mut any_ok = false;
+            for res in join_all(futs).await {
+                if let Ok(Ok((onlines, offlines))) = res {
+                    any_ok = true;
+                    mixed_onlines.extend(onlines);
+                    mixed_offlines.extend(offlines);
+                }
+            }
+            if any_ok {
+                f(mixed_onlines, mixed_offlines);
             }
         }
     }
 
-    async fn create_online_stream() -> ResultType<Stream> {
-        let (rendezvous_server, _servers, _contained) =
-            crate::get_rendezvous_server(READ_TIMEOUT).await;
+    async fn create_online_stream(rendezvous_server: Option<String>) -> ResultType<Stream> {
+        let rendezvous_server = match rendezvous_server {
+            Some(s) => crate::check_port(s, RENDEZVOUS_PORT),
+            None => crate::get_rendezvous_server(READ_TIMEOUT).await.0,
+        };
         let tmp: Vec<&str> = rendezvous_server.split(":").collect();
         if tmp.len() != 2 {
             bail!("Invalid server address: {}", rendezvous_server);
@@ -5322,7 +5406,8 @@ pub mod peer_online {
         connect_tcp(online_server, CONNECT_TIMEOUT).await
     }
 
-    async fn query_online_states_(
+    async fn query_online_states_for(
+        rendezvous_server: Option<String>,
         ids: &Vec<String>,
         timeout: std::time::Duration,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
@@ -5333,7 +5418,7 @@ pub mod peer_online {
             ..Default::default()
         });
 
-        let mut socket = match create_online_stream().await {
+        let mut socket = match create_online_stream(rendezvous_server).await {
             Ok(s) => s,
             Err(e) => {
                 log::debug!("Failed to create peers online stream, {e}");
