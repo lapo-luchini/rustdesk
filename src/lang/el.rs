@@ -815,5 +815,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", ""),
         ("api_server_connection_tip", ""),
         ("api_server_empty_tip", ""),
-    ].iter().cloned().collect();
+            ("global", "καθολικό"),
+        ("Public server", "Δημόσιος διακομιστής"),
+        ("Profile name", "Όνομα προφίλ"),
+        ("Save as profile", "Αποθήκευση ως προφίλ"),
+        ("Delete profile", "Διαγραφή προφίλ"),
+        ("Please enter a profile name", "Εισαγάγετε όνομα προφίλ"),
+].iter().cloned().collect();
 }

@@ -464,7 +464,6 @@ class ServerInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
 
-    const Color colorPositive = Colors.green;
     const Color colorNegative = Colors.red;
     const double iconMarginRight = 15;
     const double iconSize = 24;
@@ -493,12 +492,9 @@ class ServerInfo extends StatelessWidget {
           Expanded(child: Text(translate('connecting_status')))
         ]);
       } else {
-        return Row(children: [
-          const Icon(Icons.check, color: colorPositive, size: iconSize)
-              .marginOnly(right: iconMarginRight),
-          Expanded(child: Text(translate('Ready')))
-        ]);
+        return _ReadyStatusRow();
       }
+    }
     }
 
     final showOneTime = serverModel.approveMode != 'click' &&
@@ -562,6 +558,96 @@ class ServerInfo extends StatelessWidget {
             ConnectionStateNotification()
           ],
         ));
+  }
+}
+
+/// The ready branch of the connection status: shows which server
+/// configuration is active (suffix after "Ready"), and opens a menu to
+/// switch between the stored profiles and the default public server.
+class _ReadyStatusRow extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => _ReadyStatusRowState();
+}
+
+class _ReadyStatusRowState extends State<_ReadyStatusRow> {
+  static const double iconSize = 24;
+  static const double iconMarginRight = 15;
+  Timer? _timer;
+  String _suffix = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = periodic_immediate(const Duration(seconds: 1), _updateSuffix);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  _updateSuffix() async {
+    final suffix = await getServerStatusLabelSuffix();
+    if (suffix != _suffix) {
+      setState(() {
+        _suffix = suffix;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final readyText = _suffix.isEmpty
+        ? translate('Ready')
+        : '${translate('Ready')} ($_suffix)';
+    return Row(children: [
+      const Icon(Icons.check, color: Colors.green, size: iconSize)
+          .marginOnly(right: iconMarginRight),
+      Expanded(
+          child: InkWell(
+              onTap: _showSwitchMenu,
+              child: Text(readyText, maxLines: 1))),
+    ]);
+  }
+
+  Future<void> _showSwitchMenu() async {
+    final profiles = await getServerProfiles();
+    final active = await getActiveServerProfileName();
+    final List<(String, ServerProfile?)> choices = [
+      (translate('Public server'), null),
+      for (final profile in profiles) (profile.name, profile),
+    ];
+    if (!mounted) {
+      return;
+    }
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final leftTop = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final height = renderBox?.size.height ?? 0;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          leftTop.dx, leftTop.dy + height, leftTop.dx, leftTop.dy + height),
+      items: choices
+          .map((e) => PopupMenuItem<String>(
+              value: e.$2?.name ?? '',
+              child: Text((e.$2?.name ?? '') == active ? '✓ ${e.$1}' : e.$1)))
+          .toList(),
+    );
+    if (selected == null || selected == active) {
+      return;
+    }
+    ServerProfile? profile;
+    for (final profile_ in profiles) {
+      if (profile_.name == selected) {
+        profile = profile_;
+        break;
+      }
+    }
+    await switchServerProfile(profile);
+    if (mounted) {
+      await _updateSuffix();
+    }
   }
 }
 

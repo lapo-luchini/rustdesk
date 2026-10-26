@@ -77,6 +77,15 @@ void showServerSettingsWithValue(
   final relayCtrl = TextEditingController(text: serverConfig.relayServer);
   final apiCtrl = TextEditingController(text: serverConfig.apiServer);
   final keyCtrl = TextEditingController(text: serverConfig.key);
+  final profiles = await getServerProfiles();
+  var profileName = '';
+  for (final profile in profiles) {
+    if (profile.matches(serverConfig)) {
+      profileName = profile.name;
+      break;
+    }
+  }
+  final nameCtrl = TextEditingController(text: profileName);
 
   RxString idServerMsg = ''.obs;
   RxString relayServerMsg = ''.obs;
@@ -88,6 +97,12 @@ void showServerSettingsWithValue(
     relayServerMsg,
     apiServerMsg,
   ];
+
+  currentServerConfig() => ServerConfig(
+      idServer: idCtrl.text.trim(),
+      relayServer: relayCtrl.text.trim(),
+      apiServer: apiCtrl.text.trim(),
+      key: keyCtrl.text.trim());
 
   dialogManager.show((setState, close, context) {
     Future<bool> submit() async {
@@ -107,6 +122,49 @@ void showServerSettingsWithValue(
       });
       return ret;
     }
+
+    saveProfile() async {
+      final name = nameCtrl.text.trim();
+      if (name.isEmpty) {
+        showToast(translate('Please enter a profile name'));
+        return;
+      }
+      profiles.removeWhere((p) => p.name == name);
+      final config = currentServerConfig();
+      profiles.add(ServerProfile(name,
+          idServer: config.idServer,
+          relayServer: config.relayServer,
+          apiServer: config.apiServer,
+          key: config.key));
+      await saveServerProfiles(profiles);
+      await updateActiveServerProfile(config);
+      showToast(translate('Successful'));
+      setState(() {});
+    }
+
+    deleteProfile() async {
+      profiles.removeWhere((p) => p.name == nameCtrl.text.trim());
+      await saveServerProfiles(profiles);
+      await updateActiveServerProfile(currentServerConfig());
+      showToast(translate('Successful'));
+      setState(() {});
+    }
+
+    profileRow() => Row(children: [
+          dialogButton('Save as profile',
+              onPressed: saveProfile, isOutline: true),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: nameCtrl,
+            builder: (context, value, child) {
+              final name = value.text.trim();
+              if (name.isEmpty || !profiles.any((p) => p.name == name)) {
+                return const SizedBox.shrink();
+              }
+              return dialogButton('Delete profile',
+                  onPressed: deleteProfile, isOutline: true);
+            },
+          ),
+        ]);
 
     Widget buildField(
         String label, TextEditingController controller, String errorMsg,
@@ -191,6 +249,14 @@ void showServerSettingsWithValue(
                   ),
                   SizedBox(height: 8),
                   buildField('Key', keyCtrl, ''),
+                  SizedBox(height: 8),
+                  buildField(translate('Profile name'), nameCtrl, ''),
+                  Padding(
+                    padding: EdgeInsetsDirectional.only(
+                      start: isDesktop || isWeb ? labelWidth + labelSpacing : 0,
+                    ),
+                    child: profileRow(),
+                  ),
                   if (isInProgress)
                     Padding(
                       padding: EdgeInsets.only(top: 8),

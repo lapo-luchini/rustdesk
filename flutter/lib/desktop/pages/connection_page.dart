@@ -35,6 +35,7 @@ class OnlineStatusWidget extends StatefulWidget {
 class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
   final _svcStopped = Get.find<RxBool>(tag: 'stop-service');
   final _svcIsUsingPublicServer = true.obs;
+  final _statusSuffix = ''.obs;
   Timer? _updateTimer;
 
   double get em => 14.0;
@@ -155,16 +156,37 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
 
   _buildConnStatusMsg() {
     widget.onSvcStatusChanged?.call();
-    return Text(
-      _svcStopped.value
-          ? translate("Service is not running")
-          : stateGlobal.svcStatus.value == SvcStatus.connecting
-              ? translate("connecting_status")
-              : stateGlobal.svcStatus.value == SvcStatus.notReady
-                  ? translate("not_ready_status")
-                  : translate('Ready'),
-      style: TextStyle(fontSize: em),
-    );
+    final svcReady = !_svcStopped.value &&
+        stateGlobal.svcStatus.value == SvcStatus.ready;
+    final text = _svcStopped.value
+        ? translate("Service is not running")
+        : stateGlobal.svcStatus.value == SvcStatus.connecting
+            ? translate("connecting_status")
+            : stateGlobal.svcStatus.value == SvcStatus.notReady
+                ? translate("not_ready_status")
+                : _readyText();
+    final child = Text(text, style: TextStyle(fontSize: em));
+    if (!svcReady || bind.isIncomingOnly()) {
+      return child;
+    }
+    return StatefulBuilder(builder: (context, setState) {
+      var tapOffset = Offset.zero;
+      return InkWell(
+        child: child,
+        onTapDown: (e) {
+          tapOffset = e.globalPosition;
+        },
+        onTap: () => showServerProfileMenu(context, tapOffset),
+      );
+    });
+  }
+
+  _readyText() {
+    // Read the observable so this rebuilds when the suffix changes.
+    final suffix = _statusSuffix.value;
+    return suffix.isEmpty
+        ? translate('Ready')
+        : '${translate('Ready')} ($suffix)';
   }
 
   updateStatus() async {
@@ -181,10 +203,53 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
       stateGlobal.svcStatus.value = SvcStatus.notReady;
     }
     _svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
+    final suffix = await getServerStatusLabelSuffix();
+    if (suffix != _statusSuffix.value) {
+      _statusSuffix.value = suffix;
+    }
     try {
       stateGlobal.videoConnCount.value = status['video_conn_count'] as int;
     } catch (_) {}
   }
+}
+
+/// Menu for switching the active server profile; opened by clicking the
+/// connection status line at the bottom of the main window.
+Future<void> showServerProfileMenu(BuildContext context, Offset offset) async {
+  final profiles = await getServerProfiles();
+  final active = await getActiveServerProfileName();
+  final List<(String, ServerProfile?)> choices = [
+    (translate('Public server'), null),
+    for (final profile in profiles) (profile.name, profile),
+  ];
+  final x = offset.dx;
+  final y = offset.dy;
+  await mod_menu.showMenu(
+    context: context,
+    position: RelativeRect.fromLTRB(x, y, x, y),
+    items: choices
+        .map((e) => MenuEntryButton<String>(
+              childBuilder: (TextStyle? style) => Text(
+                (e.$2?.name ?? '') == active ? '✓ ${e.$1}' : e.$1,
+                style: style,
+              ),
+              proc: () async {
+                await switchServerProfile(e.$2);
+              },
+              padding:
+                  EdgeInsets.symmetric(horizontal: kDesktopMenuPadding.left),
+              dismissOnClicked: true,
+            ))
+        .map((e) => e.build(
+            context,
+            const MenuConfig(
+                commonColor: CustomPopupMenuTheme.commonColor,
+                height: CustomPopupMenuTheme.height,
+                dividerHeight: CustomPopupMenuTheme.dividerHeight)))
+        .expand((i) => i)
+        .toList(),
+    elevation: 8,
+  );
 }
 
 /// Connection page for connecting to a remote peer.

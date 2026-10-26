@@ -813,5 +813,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "این کلید برای میانبر پشتیبانی نمی‌شود."),
         ("On", "روشن"),
         ("Off", "خاموش"),
-    ].iter().cloned().collect();
+            ("global", "سراسری"),
+        ("Public server", "سرور عمومی"),
+        ("Profile name", "نام پروفایل"),
+        ("Save as profile", "ذخیره به عنوان پروفایل"),
+        ("Delete profile", "حذف پروفایل"),
+        ("Please enter a profile name", "لطفاً نام پروفایل را وارد کنید"),
+].iter().cloned().collect();
 }

@@ -2973,6 +2973,54 @@ class ServerConfig {
         key = options['key'] ?? "";
 }
 
+/// A named, switchable copy of the ID/Relay server settings.
+class ServerProfile {
+  String name;
+  String idServer;
+  String relayServer;
+  String apiServer;
+  String key;
+
+  ServerProfile(this.name,
+      {String? idServer, String? relayServer, String? apiServer, String? key})
+      : idServer = (idServer ?? '').trim(),
+        relayServer = (relayServer ?? '').trim(),
+        apiServer = (apiServer ?? '').trim(),
+        key = (key ?? '').trim();
+
+  factory ServerProfile.fromJson(dynamic json) {
+    Map<String, dynamic>? map;
+    if (json is Map) {
+      map = json.cast<String, dynamic>();
+    }
+    return ServerProfile(map?['name'] ?? '',
+        idServer: map?['id_server'] ?? '',
+        relayServer: map?['relay_server'] ?? '',
+        apiServer: map?['api_server'] ?? '',
+        key: map?['key'] ?? '');
+  }
+
+  Map<String, String> toJson() => {
+        'name': name,
+        'id_server': idServer,
+        'relay_server': relayServer,
+        'api_server': apiServer,
+        'key': key,
+      };
+
+  ServerConfig toServerConfig() => ServerConfig(
+      idServer: idServer,
+      relayServer: relayServer,
+      apiServer: apiServer,
+      key: key);
+
+  bool matches(ServerConfig config) =>
+      idServer == config.idServer &&
+      relayServer == config.relayServer &&
+      apiServer == config.apiServer &&
+      key == config.key;
+}
+
 Widget dialogButton(String text,
     {required VoidCallback? onPressed,
     bool isOutline = false,
@@ -3639,7 +3687,71 @@ Future<bool> setServerConfig(
       gFFI.userModel.isLogin) {
     gFFI.userModel.logOut(apiServer: oldApiServer);
   }
+  await updateActiveServerProfile(config);
   return true;
+}
+
+const kOptionServerProfiles = 'server-profiles';
+const kOptionServerProfileActive = 'server-profile-active';
+
+Future<List<ServerProfile>> getServerProfiles() async {
+  final value = await bind.mainGetOption(key: kOptionServerProfiles);
+  try {
+    final list = jsonDecode(value);
+    if (list is! List) {
+      return [];
+    }
+    return list.map((e) => ServerProfile.fromJson(e)).toList();
+  } catch (e) {
+    debugPrint('Failed to parse server profiles: $e');
+    return [];
+  }
+}
+
+Future<void> saveServerProfiles(List<ServerProfile> profiles) async {
+  final value = profiles.isEmpty
+      ? ''
+      : jsonEncode(profiles.map((e) => e.toJson()).toList());
+  await bind.mainSetOption(key: kOptionServerProfiles, value: value);
+}
+
+Future<String> getActiveServerProfileName() async =>
+    (await bind.mainGetOption(key: kOptionServerProfileActive)).trim();
+
+/// Keeps the active profile name in sync with the stored profiles: after any
+/// write of the server settings, the marker points to the profile matching the
+/// values, and is cleared when the values are no longer a stored profile.
+Future<void> updateActiveServerProfile(ServerConfig config) async {
+  String name = '';
+  for (final profile in await getServerProfiles()) {
+    if (profile.matches(config)) {
+      name = profile.name;
+      break;
+    }
+  }
+  if (name != await getActiveServerProfileName()) {
+    await bind.mainSetOption(key: kOptionServerProfileActive, value: name);
+  }
+}
+
+/// `profile == null` switches back to the default public server.
+Future<bool> switchServerProfile(ServerProfile? profile) async {
+  return setServerConfig(
+      null, null, profile?.toServerConfig() ?? ServerConfig());
+}
+
+/// The label shown in parentheses after "Ready" in the connection status.
+/// Empty when no profile has ever been configured, so unconfigured
+/// installations keep seeing a plain "Ready".
+Future<String> getServerStatusLabelSuffix() async {
+  final active = await getActiveServerProfileName();
+  if (active.isNotEmpty) {
+    return active;
+  }
+  if ((await getServerProfiles()).isNotEmpty) {
+    return translate('global');
+  }
+  return '';
 }
 
 ColorFilter? svgColor(Color? color) {

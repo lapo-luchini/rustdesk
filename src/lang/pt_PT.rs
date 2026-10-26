@@ -815,5 +815,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Off", "Desligado"),
         ("api_server_connection_tip", "O seu servidor personalizado utiliza HTTP não encriptado. Contacte o seu administrador para ativar o HTTPS."),
         ("api_server_empty_tip", "Com o servidor da API vazio, o seu servidor personalizado utiliza HTTP por predefinição. Contacte o seu administrador para ativar o HTTPS."),
-    ].iter().cloned().collect();
+            ("global", "global"),
+        ("Public server", "Servidor público"),
+        ("Profile name", "Nome do perfil"),
+        ("Save as profile", "Guardar como perfil"),
+        ("Delete profile", "Eliminar perfil"),
+        ("Please enter a profile name", "Introduza um nome de perfil"),
+].iter().cloned().collect();
 }
