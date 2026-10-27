@@ -5350,7 +5350,7 @@ pub mod peer_online {
         } else {
             // One query per distinct rendezvous server; peers without a
             // profile share the single active-configuration query as before.
-            let groups = match hbb_common::tokio::task::spawn_blocking(|| group_by_server(&ids))
+            let groups = match hbb_common::tokio::task::spawn_blocking(move || group_by_server(&ids))
                 .await
             {
                 Ok(groups) => groups,

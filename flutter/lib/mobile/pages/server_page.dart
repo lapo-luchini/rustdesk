@@ -495,7 +495,6 @@ class ServerInfo extends StatelessWidget {
         return _ReadyStatusRow();
       }
     }
-    }
 
     final showOneTime = serverModel.approveMode != 'click' &&
         serverModel.verificationMethod != kUsePermanentPassword;
@@ -587,7 +586,7 @@ class _ReadyStatusRowState extends State<_ReadyStatusRow> {
     super.dispose();
   }
 
-  _updateSuffix() async {
+  Future<void> _updateSuffix() async {
     final suffix = await getServerStatusLabelSuffix();
     if (suffix != _suffix) {
       setState(() {
